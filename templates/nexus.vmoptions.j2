@@ -1,0 +1,8 @@
+-Xms{{ nexus_xms }}
+-Xmx{{ nexus_xmx }}
+-XX:MaxDirectMemorySize=1024m
+-Dkaraf.data={{ nexus_data_dir }}
+-Djava.io.tmpdir={{ nexus_data_dir }}/tmp
+-XX:+UnlockDiagnosticVMOptions
+-XX:+LogVMOutput
+-XX:LogFile={{ nexus_data_dir }}/log/jvm.log

@@ -1,0 +1,91 @@
+- name: Verify Java is installed
+  command: java -version
+  register: java_check
+  failed_when: java_check.rc != 0
+  changed_when: false
+
+- name: Create nexus user
+  user:
+    name: "{{ nexus_user }}" 
+    system: yes
+    shell: /bin/bash
+
+- name: Create directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_user }}"
+  loop:
+    - /opt/sonatype-work
+    - "{{ nexus_data_dir }}"
+    - "{{ nexus_data_dir }}/log"
+    - "{{ nexus_data_dir }}/tmp"
+
+- name: Download Nexus
+  get_url:
+    url: "{{ nexus_download_url }}"
+    dest: /opt/nexus.tar.gz
+    mode: "0644"
+
+- name: Extract Nexus
+  unarchive:
+    src: /opt/nexus.tar.gz
+    dest: /opt
+    remote_src: yes
+    creates: "/opt/nexus-{{ nexus_version }}"
+
+- name: Rename Nexus directory
+  command: mv /opt/nexus-{{ nexus_version }} {{ nexus_install_dir }}
+  args:
+    creates: "{{ nexus_install_dir }}"
+
+- name: Set ownership
+  file:
+    path: "{{ item }}"
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_user }}"
+    recurse: yes
+  loop:
+    - "{{ nexus_install_dir }}"
+    - /opt/sonatype-work
+
+- name: Configure nexus.rc
+  copy:
+    dest: "{{ nexus_install_dir }}/bin/nexus.rc"
+    content: |
+      run_as_user="{{ nexus_user }}"
+      JAVA_HOME="{{ java_home }}"
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_user }}"
+
+- name: Configure JVM options
+  template:
+    src: nexus.vmoptions.j2
+    dest: "{{ nexus_install_dir }}/bin/nexus.vmoptions"
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_user }}"
+  notify: Restart Nexus
+
+- name: Create systemd service
+  template:
+    src: nexus.service.j2
+    dest: /etc/systemd/system/nexus.service
+  notify: Restart Nexus
+
+- name: Allow Nexus port
+  ufw:
+    rule: allow
+    port: "{{ nexus_port }}"
+    proto: tcp
+  ignore_errors: yes
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Enable & start Nexus
+  systemd:
+    name: nexus
+    enabled: yes
+    state: started
